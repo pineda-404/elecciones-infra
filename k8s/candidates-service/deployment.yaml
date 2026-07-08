@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: candidates-service
+  namespace: onpe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: candidates-service
+  template:
+    metadata:
+      labels:
+        app: candidates-service
+    spec:
+      containers:
+        - name: candidates-service
+          image: onpe-candidates-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8001
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: onpe-config
+                  key: DATABASE_URL_candidates
+            - name: PORT
+              value: "8001"
+          readinessProbe:
+            httpGet:
+              path: /api/candidatos/health
+              port: 8001
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: candidates-service
+  namespace: onpe
+spec:
+  ports:
+    - port: 8001
+  selector:
+    app: candidates-service

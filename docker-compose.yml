@@ -1,0 +1,158 @@
+version: "3.9"
+
+services:
+  # ── Bases de datos ──────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: onpe_candidates
+      MYSQL_ROOT_PASSWORD: onpe2026
+      MYSQL_USER: onpe
+      MYSQL_PASSWORD: onpe2026
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uonpe", "-ponpe2026"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - onpe-net
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: onpe_results
+      POSTGRES_USER: onpe
+      POSTGRES_PASSWORD: onpe2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onpe -d onpe_results"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - onpe-net
+
+  mongodb:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_DATABASE: onpe_geography
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - onpe-net
+
+  # ── Infraestructura ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - onpe-net
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: onpe
+      RABBITMQ_DEFAULT_PASS: onpe2026
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - onpe-net
+
+  # ── Microservicios de negocio ───────────────────────────────
+  candidates-service:
+    build:
+      context: ../onpe-candidates-service
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: mysql+pymysql://onpe:onpe2026@mysql:3306/onpe_candidates
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - onpe-net
+
+  results-service:
+    build:
+      context: ../onpe-results-service
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: postgresql://onpe:onpe2026@postgres:5432/onpe_results
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://onpe:onpe2026@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - onpe-net
+
+  geography-service:
+    build:
+      context: ../onpe-geography-service
+    ports:
+      - "8003:8003"
+    environment:
+      MONGODB_URL: mongodb://mongodb:27017/onpe_geography
+      RABBITMQ_URL: amqp://onpe:onpe2026@rabbitmq:5672/
+      RESULTS_SERVICE_URL: http://results-service:8002
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - onpe-net
+
+  # ── Nginx (API Gateway + Frontend estático) ─────────────────
+  nginx:
+    build:
+      context: ..
+      dockerfile: onpe-infra/Dockerfile.nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - candidates-service
+      - results-service
+      - geography-service
+    networks:
+      - onpe-net
+
+volumes:
+  mysql_data:
+  postgres_data:
+  mongo_data:
+
+networks:
+  onpe-net:
+    driver: bridge

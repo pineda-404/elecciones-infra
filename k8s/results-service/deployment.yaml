@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: results-service
+  namespace: onpe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: results-service
+  template:
+    metadata:
+      labels:
+        app: results-service
+    spec:
+      containers:
+        - name: results-service
+          image: onpe-results-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8002
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: onpe-config
+                  key: DATABASE_URL_results
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: onpe-config
+                  key: REDIS_URL
+            - name: RABBITMQ_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: onpe-config
+                  key: RABBITMQ_URL
+            - name: PORT
+              value: "8002"
+          readinessProbe:
+            httpGet:
+              path: /api/resultados/health
+              port: 8002
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: results-service
+  namespace: onpe
+spec:
+  ports:
+    - port: 8002
+  selector:
+    app: results-service

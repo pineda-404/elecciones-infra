@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: onpe-config
+  namespace: onpe
+data:
+  DATABASE_URL_candidates: "mysql+pymysql://onpe:onpe2026@mysql:3306/onpe_candidates"
+  DATABASE_URL_results: "postgresql://onpe:onpe2026@postgres:5432/onpe_results"
+  REDIS_URL: "redis://redis:6379/0"
+  RABBITMQ_URL: "amqp://onpe:onpe2026@rabbitmq:5672/"
+  MONGODB_URL: "mongodb://mongodb:27017/onpe_geography"
+  RESULTS_SERVICE_URL: "http://results-service:8002"
